@@ -1,0 +1,12 @@
+[submodule "apps/frontend"]
+	path = apps/frontend
+	url = https://github.com/Dispatch-AI-com/frontend.git
+	branch = main
+[submodule "apps/backend"]
+	path = apps/backend
+	url = https://github.com/Dispatch-AI-com/backend.git
+	branch = main
+[submodule "apps/ai"]
+	path = apps/ai
+	url = https://github.com/Dispatch-AI-com/AI.git
+	branch = main
