@@ -1,0 +1,87 @@
+name: Deploy UAT
+
+on:
+  # 子仓触发 deploy 事件
+  repository_dispatch:
+    types: [deploy_uat]
+
+  # 可手动在主库 Actions 中触发（方便测试）
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Why deploy? (optional)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  id-token: write   # 保留 OIDC，用于后续扩展
+
+concurrency:
+  group: deploy-uat
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ap-southeast-2
+  REMOTE_PROJECT_DIR: /opt/dispatchai-platform
+  REMOTE_COMPOSE_FILE: infra/docker-compose.uat.yml
+
+jobs:
+  deploy:
+    name: Deploy to UAT EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout (main repo)
+        uses: actions/checkout@v4
+
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: |
+            ${{ secrets.UAT_SSH_KEY }}
+
+      - name: Add host to known_hosts
+        run: ssh-keyscan -H ${{ secrets.UAT_SSH_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy via SSH
+        env:
+          UAT_SSH_HOST: ${{ secrets.UAT_SSH_HOST }}
+          UAT_SSH_USER: ${{ secrets.UAT_SSH_USER }}
+          AWS_REGION: ${{ env.AWS_REGION }}
+          REMOTE_PROJECT_DIR: ${{ env.REMOTE_PROJECT_DIR }}
+          REMOTE_COMPOSE_FILE: ${{ env.REMOTE_COMPOSE_FILE }}
+        run: |
+          ssh ${UAT_SSH_USER}@${UAT_SSH_HOST} <<'EOF'
+          set -euo pipefail
+
+          echo "==> Switching to project directory"
+          cd "${REMOTE_PROJECT_DIR}"
+
+          echo "==> Updating repo (optional)"
+          if [ -d .git ]; then
+            git fetch --all --prune || true
+            git pull --rebase || true
+          fi
+
+          echo "==> Logging into ECR"
+          ACCOUNT_ID=$(aws sts get-caller-identity --query 'Account' --output text)
+          aws ecr get-login-password --region ${AWS_REGION} \
+            | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com
+
+          echo "==> Pulling latest UAT images"
+          docker compose -f ${REMOTE_COMPOSE_FILE} pull
+
+          echo "==> Restarting containers"
+          docker compose -f ${REMOTE_COMPOSE_FILE} up -d
+
+          echo "==> Showing status"
+          docker compose -f ${REMOTE_COMPOSE_FILE} ps
+
+          echo "==> Cleaning old images"
+          docker image prune -f || true
+
+          EOF
+
+      - name: ✅ Done
+        run: echo "UAT deploy finished."

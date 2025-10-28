@@ -1,0 +1,47 @@
+version: "3.9"
+
+networks:
+  dispatchai-network:
+    driver: bridge
+
+services:
+  frontend:
+    image: 123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/frontend:uat-latest
+    container_name: dispatchai-frontend
+    env_file:
+      - ../.env.shared
+      - ../.env.uat
+      - ../apps/frontend/.env.uat
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
+    networks:
+      - dispatchai-network
+
+  api:
+    image: 123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/backend:uat-latest
+    container_name: dispatchai-api
+    env_file:
+      - ../.env.shared
+      - ../.env.uat
+    ports:
+      - "4000:4000"
+    restart: unless-stopped
+    networks:
+      - dispatchai-network
+
+  ai:
+    image: 123456789012.dkr.ecr.ap-southeast-2.amazonaws.com/ai:uat-latest
+    container_name: dispatchai-ai
+    env_file:
+      - ../.env.shared
+      - ../.env.uat
+      - ../apps/ai/.env.uat
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - dispatchai-network
