@@ -1,0 +1,19 @@
+{
+    "name": "dispatchai-platform",
+    "private": true,
+    "scripts": {
+      "dev:up": "docker compose -f infra/docker-compose.dev.yml up -d --build",
+      "dev:down": "docker compose -f infra/docker-compose.dev.yml down",
+      "dev:logs": "docker compose -f infra/docker-compose.dev.yml logs -f --tail=100",
+      "dev:ps": "docker compose -f infra/docker-compose.dev.yml ps",
+  
+      "dev:rebuild:api": "docker compose -f infra/docker-compose.dev.yml build api && docker compose -f infra/docker-compose.dev.yml up -d api",
+      "dev:rebuild:ai": "docker compose -f infra/docker-compose.dev.yml build ai && docker compose -f infra/docker-compose.dev.yml up -d ai",
+  
+      "uat:up": "docker compose -f infra/docker-compose.uat.yml up -d --build",
+      "uat:down": "docker compose -f infra/docker-compose.uat.yml down",
+      "prod:up": "docker compose -f infra/docker-compose.prod.yml up -d --build",
+      "prod:down": "docker compose -f infra/docker-compose.prod.yml down"
+    }
+  }
+  

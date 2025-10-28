@@ -1,0 +1,106 @@
+name: dispatchai
+
+services:
+  frontend:
+    build:
+      context: ../apps/frontend
+      dockerfile: Dockerfile.dev
+    env_file:
+      - ../.env.shared
+      - ../.env.dev
+      - ../apps/frontend/.env.local
+    ports:
+      - "3000:3000"
+    volumes:
+      - ../apps/frontend:/app
+      - /app/node_modules
+    depends_on:
+      api:
+        condition: service_started
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../apps/backend
+      dockerfile: Dockerfile.dev
+    container_name: dispatchai-api
+    restart: unless-stopped
+    ports:
+      - "4000:4000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ../.env.shared
+      - ../.env.dev
+      - ../apps/backend/.env.local
+    volumes:
+      - ../apps/backend:/app
+      - /app/node_modules
+
+  ai:
+    build:
+      context: ../apps/ai
+      dockerfile: Dockerfile.dev
+    container_name: dispatchai-ai
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - ../.env.shared
+      - ../.env.dev
+      - ../apps/ai/.env.local
+    volumes:
+      - ../apps/ai:/app
+
+  mongo:
+    image: mongo:7
+    container_name: dispatchai-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  redis:
+    image: redis:7-alpine
+    container_name: dispatchai-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # 如需开启 Cloudflared，可取消下面块注释
+  # cloudflared:
+  #   image: cloudflare/cloudflared:latest
+  #   container_name: dispatchai-cloudflared
+  #   restart: unless-stopped
+  #   command: tunnel run
+  #   volumes:
+  #     - ../cloudflared:/etc/cloudflared
+  #   depends_on:
+  #     api:
+  #       condition: service_started
+  #   profiles: [tunnel]
+
+volumes:
+  mongo-data:
+  redis-data:
