@@ -1,0 +1,516 @@
+---
+description: Backend development rules for NestJS, TypeScript, and MongoDB
+alwaysApply: false
+---
+
+# Backend Development Rules (NestJS 11 + MongoDB)
+
+## Core Principles
+
+Follow SOLID, DRY, KISS, and prioritize code readability.
+
+## Architecture Patterns
+
+### Module Structure
+
+```
+module-name/
+├── module-name.module.ts    # Module definition
+├── module-name.controller.ts # HTTP endpoints
+├── module-name.service.ts   # Business logic
+├── schema/                  # Mongoose schemas
+│   └── module-name.schema.ts
+├── dto/                     # Data Transfer Objects
+│   ├── create-module-name.dto.ts
+│   └── update-module-name.dto.ts
+├── types/                   # TypeScript types
+└── helpers/                 # Module-specific utilities
+```
+
+### NestJS Module Pattern
+
+```typescript
+// ✅ Good - Clean module structure
+@Module({
+  imports: [MongooseModule.forFeature([{ name: User.name, schema: userSchema }])],
+  controllers: [UserController],
+  providers: [UserService],
+  exports: [UserService], // Export if used by other modules
+})
+export class UserModule {}
+
+// ❌ Bad - Services not exported when needed elsewhere
+```
+
+## Service Layer
+
+### Single Responsibility Principle
+
+```typescript
+// ✅ Good - Focused service with single responsibility
+@Injectable()
+export class CalllogService {
+  constructor(
+    @InjectModel(CallLog.name)
+    private readonly callLogModel: Model<CallLogDocument>,
+  ) {}
+
+  async findAll(options: FindAllOptions): Promise<ICallLogResponse> {
+    // Query building
+    const query = this.buildQuery(options);
+    
+    // Database operations
+    const [callLogs, total] = await Promise.all([
+      this.callLogModel.find(query).sort({ startAt: -1 }),
+      this.callLogModel.countDocuments(query),
+    ]);
+    
+    // Data transformation
+    return {
+      data: callLogs.map(log => this.convertToICallLog(log)),
+      total,
+    };
+  }
+
+  private buildQuery(options: FindAllOptions): CallLogQuery {
+    // Query building logic isolated
+  }
+}
+
+// ❌ Bad - Service doing too much
+@Injectable()
+export class CalllogService {
+  async findAll(options: FindAllOptions): Promise<any> {
+    // Query, auth, validation, transformation all mixed
+    const user = await this.authService.getCurrentUser();
+    const validation = await this.validateOptions(options);
+    if (!validation.isValid) throw new Error();
+    const query = await this.buildQuery(options, user);
+    // ... 50 more lines of mixed logic
+  }
+}
+```
+
+### Dependency Injection
+
+```typescript
+// ✅ Good - Proper DI with typed dependencies
+@Injectable()
+export class TelephonyService {
+  constructor(
+    private readonly callProcessor: CallProcessorService,
+    private readonly aiIntegration: AiIntegrationService,
+    private readonly logger: Logger,
+  ) {}
+}
+
+// ❌ Bad - Creating dependencies manually
+@Injectable()
+export class TelephonyService {
+  private callProcessor: CallProcessorService;
+  
+  constructor() {
+    this.callProcessor = new CallProcessorService(); // Wrong!
+  }
+}
+```
+
+## Controller Layer
+
+### Clean Controllers
+
+```typescript
+// ✅ Good - Thin controllers, delegate to services
+@Controller('calllog')
+@ApiTags('calllog')
+export class CalllogController {
+  constructor(private readonly callLogService: CalllogService) {}
+
+  @Get()
+  @ApiOperation({ summary: 'Get all call logs' })
+  async findAll(@Query() query: GetCallLogsDto): Promise<ICallLogResponse> {
+    return this.callLogService.findAll(query);
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Create call log' })
+  async create(@Body() dto: CreateCallLogDto): Promise<ICallLog> {
+    return this.callLogService.create(dto);
+  }
+}
+
+// ❌ Bad - Controllers with business logic
+@Controller('calllog')
+export class CalllogController {
+  @Get()
+  async findAll(@Query() query: any): Promise<any> {
+    // Business logic in controller - WRONG!
+    const user = await this.authService.getCurrentUser();
+    if (user.role !== 'admin') throw new Error();
+    const data = await this.db.find(query).map(x => {
+      // Data transformation in controller
+    });
+    return data;
+  }
+}
+```
+
+## Data Validation
+
+### DTOs with class-validator
+
+```typescript
+// ✅ Good - Validated DTOs
+export class CreateCallLogDto {
+  @IsString()
+  @IsNotEmpty()
+  userId!: string;
+
+  @IsString()
+  @Matches(/^\+\d{10,15}$/)
+  callerNumber!: string;
+
+  @IsNumber()
+  @Min(0)
+  duration!: number;
+
+  @IsEnum(CallStatus)
+  status!: CallStatus;
+}
+
+// Usage
+@Post()
+async create(@Body() dto: CreateCallLogDto): Promise<ICallLog> {
+  // DTO is already validated by ValidationPipe
+  return this.callLogService.create(dto);
+}
+
+// ❌ Bad - No validation
+export class CreateCallLogDto {
+  userId: string;
+  callerNumber: string;
+  duration: number;
+  status: string;
+}
+```
+
+## Database Patterns
+
+### Mongoose Schemas
+
+```typescript
+// ✅ Good - Proper schema definition with types
+@Schema({ timestamps: true })
+export class User extends Document {
+  @Prop({ required: true, unique: true })
+  email!: string;
+
+  @Prop({ required: false, select: false })
+  password?: string;
+
+  @Prop({
+    type: String,
+    enum: UserStatus,
+    default: UserStatus.active,
+  })
+  status!: UserStatus;
+
+  readonly createdAt!: Date;
+  readonly updatedAt!: Date;
+}
+
+export type UserDocument = User & Document;
+export const userSchema = SchemaFactory.createForClass(User);
+
+// ❌ Bad - Loose types, no validation
+@Schema()
+export class User {
+  @Prop()
+  email: any;
+
+  @Prop()
+  status: any;
+}
+```
+
+### Query Patterns
+
+```typescript
+// ✅ Good - Efficient queries with proper typing
+async findAll(options: FindAllOptions): Promise<ICallLogResponse> {
+  const query: CallLogQuery = { userId: options.userId };
+  
+  // Build query safely
+  if (options.search) {
+    query.$or = [
+      { callerNumber: { $regex: options.search, $options: 'i' } },
+    ];
+  }
+  
+  // Use Promise.all for parallel operations
+  const [callLogs, total] = await Promise.all([
+    this.callLogModel
+      .find(query)
+      .sort({ startAt: -1 })
+      .skip((options.page - 1) * options.limit)
+      .limit(options.limit)
+      .lean(),
+    this.callLogModel.countDocuments(query),
+  ]);
+  
+  return {
+    data: callLogs.map(log => this.convertToICallLog(log)),
+    total,
+  };
+}
+
+// ❌ Bad - N+1 queries, no error handling
+async findAll(): Promise<any> {
+  const logs = await this.callLogModel.find();
+  for (const log of logs) {
+    log.user = await this.userModel.findById(log.userId);
+    log.company = await this.companyModel.findById(log.companyId);
+  }
+  return logs;
+}
+```
+
+## Error Handling
+
+### Global Exception Filter
+
+```typescript
+// ✅ Good - Centralized error handling
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse();
+    const request = ctx.getRequest();
+
+    const status = exception instanceof HttpException
+      ? exception.getStatus()
+      : HttpStatus.INTERNAL_SERVER_ERROR;
+
+    const message = exception instanceof HttpException
+      ? exception.getMessage()
+      : 'Internal server error';
+
+    response.status(status).json({
+      statusCode: status,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+      message,
+    });
+  }
+}
+
+// ❌ Bad - Errors thrown without proper formatting
+async findOne(id: string) {
+  const doc = await this.model.findById(id);
+  if (!doc) throw new Error('Not found'); // Wrong status code, format
+}
+```
+
+### Service-Level Errors
+
+```typescript
+// ✅ Good - Proper error handling with appropriate exceptions
+@Injectable()
+export class CalllogService {
+  async findOne(id: string): Promise<ICallLog> {
+    const doc = await this.callLogModel.findById(id);
+    
+    if (!doc) {
+      throw new NotFoundException(`Call log with ID ${id} not found`);
+    }
+    
+    return this.convertToICallLog(doc);
+  }
+
+  async create(dto: CreateCallLogDto): Promise<ICallLog> {
+    try {
+      const doc = await this.callLogModel.create(dto);
+      return this.convertToICallLog(doc);
+    } catch (error) {
+      if (error instanceof MongooseError.ValidationError) {
+        throw new BadRequestException(error.message);
+      }
+      throw error;
+    }
+  }
+}
+
+// ❌ Bad - Generic errors or no error handling
+async findOne(id: string): Promise<any> {
+  return await this.model.findById(id); // Might be null
+}
+```
+
+## Security
+
+### CSRF Protection
+
+```typescript
+// ✅ Good - CSRF guard for state-changing operations
+@Post()
+@UseGuards(JwtAuthGuard, CsrfGuard)
+async create(@Body() dto: CreateCallLogDto): Promise<ICallLog> {
+  return this.callLogService.create(dto);
+}
+
+// ❌ Bad - No CSRF protection
+@Post()
+async create(@Body() dto: any): Promise<any> {
+  // Vulnerable to CSRF attacks
+}
+```
+
+### Authentication & Authorization
+
+```typescript
+// ✅ Good - Proper guards and decorators
+@Controller('calllog')
+@UseGuards(JwtAuthGuard) // Protect all routes
+export class CalllogController {
+  @Get('admin/stats')
+  @UseGuards(RolesGuard) // Additional authorization
+  @Roles('admin')
+  async getStats() {
+    return this.callLogService.getStats();
+  }
+}
+
+// ❌ Bad - Manual auth checks in every method
+@Get()
+async findAll(@Query() query: any) {
+  const token = req.headers.authorization;
+  if (!token || !this.jwtService.verify(token)) {
+    throw new Error('Unauthorized');
+  }
+  // ...
+}
+```
+
+## Logging
+
+### Winston Logger
+
+```typescript
+// ✅ Good - Structured logging
+@Injectable()
+export class CalllogService {
+  private readonly logger = new Logger(CalllogService.name);
+
+  async create(dto: CreateCallLogDto): Promise<ICallLog> {
+    this.logger.log(`Creating call log for user ${dto.userId}`);
+    
+    try {
+      const doc = await this.callLogModel.create(dto);
+      this.logger.log(`Call log ${doc._id} created successfully`);
+      return this.convertToICallLog(doc);
+    } catch (error) {
+      this.logger.error(`Failed to create call log: ${error.message}`, error.stack);
+      throw error;
+    }
+  }
+}
+
+// ❌ Bad - console.log everywhere
+async create(dto: CreateCallLogDto) {
+  console.log('Creating call log'); // Bad
+  console.log(dto); // Bad
+  return await this.model.create(dto);
+}
+```
+
+## Testing
+
+### Unit Tests
+
+```typescript
+// ✅ Good - Isolated unit tests with mocks
+describe('CalllogService', () => {
+  let service: CalllogService;
+  let model: Model<CallLogDocument>;
+
+  beforeEach(async () => {
+    const module = await Test.createTestingModule({
+      providers: [
+        CalllogService,
+        {
+          provide: getModelToken(CallLog.name),
+          useValue: mockCallLogModel,
+        },
+      ],
+    }).compile();
+
+    service = module.get<CalllogService>(CalllogService);
+    model = module.get<Model<CallLogDocument>>(getModelToken(CallLog.name));
+  });
+
+  it('should create a call log', async () => {
+    const dto: CreateCallLogDto = {
+      userId: '123',
+      callerNumber: '+1234567890',
+      duration: 60,
+      status: CallStatus.completed,
+    };
+
+    jest.spyOn(model, 'create').mockResolvedValueOnce(mockCallLog);
+    
+    const result = await service.create(dto);
+    
+    expect(result.userId).toBe(dto.userId);
+    expect(model.create).toHaveBeenCalledWith(dto);
+  });
+});
+
+// ❌ Bad - Tests hitting real database
+```
+
+## API Documentation
+
+### Swagger Decorators
+
+```typescript
+// ✅ Good - Complete API documentation
+@Controller('calllog')
+@ApiTags('calllog')
+export class CalllogController {
+  @Get()
+  @ApiOperation({ summary: 'Get all call logs' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns paginated call logs',
+    type: CallLogResponseDto,
+  })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  async findAll(@Query() query: GetCallLogsDto): Promise<ICallLogResponse> {
+    return this.callLogService.findAll(query);
+  }
+}
+
+// ❌ Bad - No documentation
+@Controller('calllog')
+export class CalllogController {
+  @Get()
+  async findAll(@Query() query: any): Promise<any> {
+    return this.service.findAll(query);
+  }
+}
+```
+
+## Common Pitfalls to Avoid
+
+1. **Don't put business logic in controllers** - Delegate to services
+2. **Don't ignore TypeScript errors** - Fix them properly
+3. **Don't use `any` types** - Define proper interfaces
+4. **Don't forget to validate input** - Use DTOs with class-validator
+5. **Don't create N+1 queries** - Use aggregations or populate wisely
+6. **Don't expose sensitive data** - Use select: false in schemas
+7. **Don't ignore errors** - Handle them appropriately
+8. **Don't forget logging** - Use Winston logger
+9. **Don't skip tests** - Write unit and integration tests
+10. **Don't over-engineer** - Keep it simple and maintainable

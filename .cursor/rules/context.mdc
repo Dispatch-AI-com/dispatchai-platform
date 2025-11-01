@@ -1,0 +1,29 @@
+# Cursor Context Configuration
+
+## 🧠 Context Overview
+This file tells Cursor to automatically include and track all submodules under `apps/*` 
+and their corresponding documentation (`README.mdc`, `.cursor/rules/**`) 
+for context and completion.
+
+## 🔧 Configuration
+{
+  "include": [
+    "README.mdc",
+    ".cursor/rules/**",
+    "apps/*/README.mdc",
+    "apps/*/.cursor/rules/**"
+  ],
+  "git": {
+    "autoTrackSubmodules": true
+  },
+  "context": {
+    "autoIndexLinkedProjects": true
+  }
+}
+
+## 💡 Notes
+- `autoTrackSubmodules: true` keeps all submodules synced with the main repository.
+- `autoIndexLinkedProjects: true` allows Cursor to treat submodules as part of the same workspace.
+- The context automatically updates when submodules change (e.g. new commits, new files).
+- Works best when each submodule also has its own `README.mdc` for local context.
+

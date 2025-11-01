@@ -1,0 +1,347 @@
+---
+description: Frontend development rules for Next.js, React, and TypeScript
+alwaysApply: false
+---
+
+# Frontend Development Rules (Next.js 15 + React 19)
+
+## Core Principles
+
+Follow SOLID, DRY, KISS, and prioritize code readability.
+
+## Component Structure
+
+### File Organization
+
+```
+component-name/
+├── index.tsx              # Main component
+├── ComponentName.tsx      # Component implementation
+├── ComponentName.types.ts # TypeScript interfaces
+├── ComponentName.styles.ts # Styled components (if needed)
+├── ComponentName.test.tsx # Tests
+└── utils.ts              # Component-specific utilities
+```
+
+### Component Patterns
+
+**Always use functional components with TypeScript:**
+
+```typescript
+// ✅ Good - Clean, typed, readable
+interface Props {
+  title: string;
+  onClose: () => void;
+}
+
+export default function MyComponent({ title, onClose }: Props) {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  // Early returns for readability
+  if (!title) return null;
+  
+  return (
+    <Box>
+      <Typography>{title}</Typography>
+      <Button onClick={onClose}>Close</Button>
+    </Box>
+  );
+}
+
+// ❌ Bad - Missing types, complex logic
+export default function MyComponent(props) {
+  return props.title ? <div>{props.title}</div> : <></>;
+}
+```
+
+## State Management
+
+### Redux Toolkit (RTK Query)
+
+**Use RTK Query for server state:**
+
+```typescript
+// ✅ Good - Typed, reusable query hooks
+export const api = createApi({
+  reducerPath: 'api',
+  baseQuery: axiosBaseQuery(),
+  endpoints: (builder) => ({
+    getBookings: builder.query<Booking[], void>({
+      query: () => ({ url: '/service-booking', method: 'GET' }),
+    }),
+  }),
+});
+
+// Usage
+const { data: bookings, isLoading } = useGetBookingsQuery();
+
+// ❌ Bad - Direct axios calls, no caching
+const [bookings, setBookings] = useState([]);
+useEffect(() => {
+  axios.get('/service-booking').then(res => setBookings(res.data));
+}, []);
+```
+
+**Use local state only for UI concerns:**
+
+```typescript
+// ✅ Good - Local state for UI
+const [isModalOpen, setIsModalOpen] = useState(false);
+
+// ❌ Bad - Server data in local state
+const [bookings, setBookings] = useState([]); // Use RTK Query instead
+```
+
+### Custom Hooks
+
+**Extract reusable logic into custom hooks:**
+
+```typescript
+// ✅ Good - Reusable hook
+function useDebounce<T>(value: T, delay: number) {
+  const [debouncedValue, setDebouncedValue] = useState(value);
+  
+  useEffect(() => {
+    const handler = setTimeout(() => setDebouncedValue(value), delay);
+    return () => clearTimeout(handler);
+  }, [value, delay]);
+  
+  return debouncedValue;
+}
+
+// ❌ Bad - Duplicated logic in multiple components
+```
+
+## Styling
+
+### Material-UI (MUI)
+
+**Prefer MUI components over custom styled:**
+
+```typescript
+// ✅ Good - Using MUI components
+import { Box, Typography, Button } from '@mui/material';
+
+<Box sx={{ padding: 2 }}>
+  <Typography variant="h5">Title</Typography>
+  <Button variant="contained">Action</Button>
+</Box>
+
+// ❌ Bad - Custom styled components when MUI exists
+const StyledBox = styled.div`padding: 16px;`;
+```
+
+**Use `sx` prop for one-off styling:**
+
+```typescript
+// ✅ Good - sx prop for simple styling
+<Box sx={{ padding: 2, backgroundColor: 'grey.100' }}>
+
+// ✅ Good - styled for complex, reusable components
+const Card = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(3),
+  borderRadius: theme.shape.borderRadius,
+}));
+
+// ❌ Bad - Inline styles
+<Box style={{ padding: '16px', backgroundColor: '#f5f5f5' }}>
+```
+
+## Forms & Validation
+
+### React Hook Form + Zod
+
+**Always validate with Zod schemas:**
+
+```typescript
+// ✅ Good - Typed, validated form
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+
+const schema = z.object({
+  email: z.string().email('Invalid email'),
+  name: z.string().min(1, 'Name required'),
+});
+
+type FormData = z.infer<typeof schema>;
+
+function MyForm() {
+  const { register, handleSubmit, formState: { errors } } = useForm<FormData>({
+    resolver: zodResolver(schema),
+  });
+  
+  return <form onSubmit={handleSubmit(onSubmit)}>...</form>;
+}
+
+// ❌ Bad - No validation, manual state
+const [email, setEmail] = useState('');
+// No type safety, no validation
+```
+
+## Error Handling
+
+### Consistent Error Patterns
+
+```typescript
+// ✅ Good - Proper error handling with RTK Query
+const { data, error, isLoading } = useGetBookingsQuery();
+
+if (error) return <ErrorMessage error={error} />;
+if (isLoading) return <LoadingSpinner />;
+return <BookingList bookings={data} />;
+
+// ✅ Good - Try-catch with user feedback
+try {
+  await saveBooking(data).unwrap();
+  toast.success('Booking saved!');
+} catch (error) {
+  toast.error('Failed to save booking');
+  console.error(error);
+}
+
+// ❌ Bad - Silent failures
+bookings.forEach(booking => {
+  try {
+    processBooking(booking);
+  } catch (error) {
+    // Silent failure - user has no idea what happened
+  }
+});
+```
+
+## Performance
+
+### Memoization
+
+**Memoize expensive computations:**
+
+```typescript
+// ✅ Good - Memoized computed values
+const expensiveResult = useMemo(() => {
+  return bookings.filter(b => b.status === 'Confirmed').length;
+}, [bookings]);
+
+// ✅ Good - Memoized callbacks
+const handleClick = useCallback(() => {
+  onSave(data);
+}, [onSave, data]);
+
+// ❌ Bad - Recomputing on every render
+const result = bookings.filter(b => b.status === 'Confirmed').length;
+```
+
+### Code Splitting
+
+```typescript
+// ✅ Good - Lazy loading heavy components
+const CalendarView = lazy(() => import('@/components/CalendarView'));
+
+<Suspense fallback={<LoadingSpinner />}>
+  <CalendarView />
+</Suspense>
+
+// ❌ Bad - Importing everything upfront
+import HeavyComponent from './HeavyComponent';
+```
+
+## TypeScript Best Practices
+
+### Explicit Types
+
+```typescript
+// ✅ Good - Explicit return types for functions
+function calculateTotal(items: Item[]): number {
+  return items.reduce((sum, item) => sum + item.price, 0);
+}
+
+// ❌ Bad - Type inference can hide errors
+function calculateTotal(items: Item[]) {
+  return items.reduce((sum, item) => sum + item.price, 0);
+}
+```
+
+### Avoid `any`
+
+```typescript
+// ✅ Good - Proper types
+interface ApiResponse {
+  data: Booking[];
+  status: 'success' | 'error';
+}
+
+// ❌ Bad - Using any
+function processResponse(response: any) {
+  return response.data;
+}
+```
+
+## Testing
+
+### Component Tests
+
+```typescript
+// ✅ Good - Testing user interactions
+import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+
+test('clicking button calls onClose', async () => {
+  const handleClose = jest.fn();
+  render(<Modal onClose={handleClose} />);
+  
+  await userEvent.click(screen.getByRole('button', { name: /close/i }));
+  expect(handleClose).toHaveBeenCalledTimes(1);
+});
+```
+
+## File Naming
+
+**Consistent naming conventions:**
+
+- Components: `PascalCase.tsx` (e.g., `BookingCard.tsx`)
+- Hooks: `useCamelCase.ts` (e.g., `useBookings.ts`)
+- Utils: `camelCase.ts` (e.g., `formatDate.ts`)
+- Types: `camelCase.types.ts` (e.g., `booking.types.ts`)
+- Constants: `UPPER_SNAKE_CASE.ts` (e.g., `API_ENDPOINTS.ts`)
+
+## API Integration
+
+### RTK Query Patterns
+
+```typescript
+// ✅ Good - Centralized API definitions
+export const serviceBookingApi = createApi({
+  baseQuery: axiosBaseQuery(),
+  tagTypes: ['Booking'],
+  endpoints: (builder) => ({
+    getBookings: builder.query<Booking[], GetBookingsParams>({
+      query: (params) => ({
+        url: '/service-booking',
+        method: 'GET',
+        params,
+      }),
+      providesTags: ['Booking'],
+    }),
+    createBooking: builder.mutation<Booking, CreateBookingDto>({
+      query: (data) => ({
+        url: '/service-booking',
+        method: 'POST',
+        data,
+      }),
+      invalidatesTags: ['Booking'],
+    }),
+  }),
+});
+
+// ❌ Bad - Inconsistent API calls scattered across components
+```
+
+## Common Pitfalls to Avoid
+
+1. **Don't mutate state directly** - Use immutable updates
+2. **Don't use `useEffect` for data fetching** - Use RTK Query
+3. **Don't ignore TypeScript errors** - Fix them properly
+4. **Don't create deeply nested components** - Break into smaller components
+5. **Don't forget to clean up effects** - Return cleanup functions
+6. **Don't use inline functions in JSX** - Use useCallback or move outside
+7. **Don't over-complicate** - Keep components simple and focused

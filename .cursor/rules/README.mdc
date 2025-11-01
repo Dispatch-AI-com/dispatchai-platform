@@ -1,0 +1,155 @@
+---
+alwaysApply: true
+---
+
+# Cursor Rules for DispatchAI Platform
+
+This directory contains coding rules and best practices for the DispatchAI Platform project.
+
+## Available Rules
+
+### Core Rules
+- **README.mdc** (this file) - Always applied, foundational rules
+
+### Domain-Specific Rules
+- **frontend.mdc** - Next.js, React, TypeScript, Material-UI patterns
+- **backend.mdc** - NestJS, MongoDB, API development patterns  
+- **ai-service.mdc** - FastAPI, Python, LangGraph, AI patterns
+- **deployment.mdc** - Docker, CI/CD, AWS, infrastructure patterns
+
+## Usage
+
+These rules are automatically applied by Cursor when editing files in their respective domains:
+
+- Editing `apps/frontend/` files → Frontend rules apply
+- Editing `apps/backend/` files → Backend rules apply
+- Editing `apps/ai/` files → AI service rules apply
+- Editing Docker/CI files → Deployment rules apply
+
+## Core Principles
+
+All rules follow these fundamental principles:
+
+### SOLID
+- **S**ingle Responsibility Principle - Each module/component should have one job
+- **O**pen/Closed Principle - Open for extension, closed for modification
+- **L**iskov Substitution Principle - Derived classes must be substitutable
+- **I**nterface Segregation Principle - Clients shouldn't depend on unused interfaces
+- **D**ependency Inversion Principle - Depend on abstractions, not concretions
+
+### DRY (Don't Repeat Yourself)
+- Extract reusable code into functions, components, services
+- Use inheritance, composition, and mixins appropriately
+- Create shared utilities and libraries
+
+### KISS (Keep It Simple, Stupid)
+- Prefer simple solutions over complex ones
+- Avoid over-engineering
+- Write code that's easy to understand
+
+### Readability
+- Use clear, descriptive names
+- Write self-documenting code
+- Add comments only when necessary
+- Follow consistent formatting
+
+### Additional Principles
+
+#### Single Responsibility
+- Every function, class, and module should do one thing well
+- If it's doing multiple things, split it up
+
+#### Clear Naming
+- Use intention-revealing names
+- Avoid abbreviations unless widely understood
+- Boolean variables should read as questions (`isActive`, `hasPermission`)
+
+#### No Hard-Coded Secrets
+- Use environment variables for all secrets
+- Never commit API keys, passwords, or tokens
+- Use proper secret management (AWS Secrets Manager, etc.)
+
+#### Comments First
+- Write clear, purpose-driven code
+- Comments should explain "why" not "what"
+- If code needs excessive comments, refactor it
+
+#### Test-Driven
+- Write tests for critical business logic
+- Aim for high test coverage (>80%)
+- Tests should be fast, isolated, and repeatable
+
+#### Explicit Error Handling
+- Always handle errors explicitly
+- Don't swallow exceptions silently
+- Provide meaningful error messages
+- Use appropriate HTTP status codes
+
+#### Secure by Default
+- Validate all input data
+- Use HTTPS everywhere
+- Implement CSRF protection
+- Follow OWASP security guidelines
+
+#### Performance Boundaries
+- Set performance budgets
+- Monitor and alert on slow queries
+- Use caching strategically
+- Optimize critical paths only
+
+#### Minimal Dependencies
+- Only add dependencies when truly needed
+- Keep dependencies up to date
+- Remove unused dependencies regularly
+- Prefer lightweight alternatives
+
+#### YAGNI (You Aren't Gonna Need It)
+- Don't build features you don't need yet
+- Remove dead code immediately
+- Avoid premature optimization
+- Keep it simple
+
+#### Code for the Reader
+- Write code as if the next person is a violent psychopath who knows where you live
+- Future you will thank present you
+- If it's not clear, make it clear
+
+#### Type Safety
+- Every exported value has an explicit type/interface
+- No `any` types unless whitelisted
+- Use TypeScript's strict mode
+- Leverage type inference where appropriate
+
+## How Rules Are Applied
+
+Cursor automatically detects the file type and location, then applies the relevant rules:
+
+```
+apps/frontend/src/components/Card.tsx → frontend.mdc rules
+apps/backend/src/modules/user/user.service.ts → backend.mdc rules
+apps/ai/app/services/llm_service.py → ai-service.mdc rules
+infra/docker-compose.yml → deployment.mdc rules
+```
+
+## Contributing Rules
+
+When adding new rules:
+
+1. Create a new `.mdc` file in `.cursor/rules/`
+2. Set `alwaysApply: false` unless it should always run
+3. Add clear descriptions and examples
+4. Follow the existing format and structure
+5. Include both ✅ good and ❌ bad examples
+
+## Quick Reference
+
+| Domain | Tech Stack | Key Files |
+|--------|------------|-----------|
+| Frontend | Next.js 15, React 19, TypeScript, MUI | `apps/frontend/src/` |
+| Backend | NestJS 11, MongoDB, TypeScript | `apps/backend/src/` |
+| AI Service | FastAPI, Python 3.11, LangGraph | `apps/ai/app/` |
+| Deployment | Docker, GitHub Actions, AWS | `infra/`, `.github/` |
+
+## Questions?
+
+Refer to the individual rule files for detailed guidelines, or check the main README.md in the project root.

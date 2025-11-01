@@ -1,0 +1,475 @@
+---
+description: AI service development rules for FastAPI, Python, and LangGraph
+alwaysApply: false
+---
+
+# AI Service Development Rules (FastAPI + Python 3.11)
+
+## Core Principles
+
+Follow SOLID, DRY, KISS, and prioritize code readability.
+
+## Python Style Guide
+
+### PEP 8 Compliance
+
+```python
+# ✅ Good - Clear naming, proper spacing
+def extract_customer_name(message: str) -> str:
+    """Extract customer name from conversation message.
+    
+    Args:
+        message: The conversation message text
+        
+    Returns:
+        Extracted name or empty string
+    """
+    patterns = [
+        r"my name is (.+?)(?:,|\.|$)",
+        r"i am (.+?)(?:,|\.|$)",
+    ]
+    
+    for pattern in patterns:
+        match = re.search(pattern, message.lower())
+        if match:
+            return match.group(1).strip().title()
+    
+    return ""
+
+# ❌ Bad - Poor naming, no docstring
+def extract(msg):
+    for p in patterns:
+        m = re.search(p, msg.lower())
+        if m:
+            return m.group(1)
+    return ""
+```
+
+### Type Hints
+
+```python
+# ✅ Good - Always use type hints
+def process_conversation(
+    state: CustomerServiceState,
+    message_history: list[Dict[str, str]],
+    settings: Settings
+) -> Dict[str, Any]:
+    """Process conversation and return updated state."""
+    # Implementation
+    
+# ❌ Bad - No type hints
+def process_conversation(state, messages, settings):
+    # Hard to understand what types are expected
+```
+
+## Architecture Patterns
+
+### File Organization
+
+```
+service/
+├── service_name.py           # Main service logic
+├── helpers/
+│   └── helper_functions.py  # Reusable helpers
+├── extractors/
+│   └── info_extractors.py   # Data extraction logic
+└── validators/
+    └── validators.py        # Validation logic
+```
+
+### Single Responsibility
+
+```python
+# ✅ Good - Single responsibility per function
+class CustomerServiceLangGraph:
+    """Customer service workflow orchestrator."""
+    
+    def process_conversation(
+        self, 
+        state: CustomerServiceState,
+        message: str
+    ) -> CustomerServiceState:
+        """Orchestrate conversation flow."""
+        current_step = state["current_step"]
+        
+        if current_step == "collect_name":
+            return self._collect_name(state, message)
+        elif current_step == "collect_phone":
+            return self._collect_phone(state, message)
+        # ... other steps
+        
+        return state
+    
+    def _collect_name(
+        self, 
+        state: CustomerServiceState, 
+        message: str
+    ) -> CustomerServiceState:
+        """Handle name collection step."""
+        extracted_name = extract_name_from_conversation(message)
+        if extracted_name:
+            state["name"] = extracted_name
+            state["name_complete"] = True
+            state["current_step"] = "collect_phone"
+        return state
+
+# ❌ Bad - One massive function doing everything
+def process_conversation(state, message):
+    # 200 lines of mixed logic
+    # Name collection
+    # Phone collection  
+    # Address collection
+    # Service selection
+    # Time selection
+    # All in one place - hard to maintain
+```
+
+## API Layer (FastAPI)
+
+### Endpoint Design
+
+```python
+# ✅ Good - Clean, typed endpoints
+@router.post("/conversation")
+async def ai_conversation(data: ConversationInput) -> ConversationResponse:
+    """Handle AI conversation request.
+    
+    Args:
+        data: Conversation input with callSid and message
+        
+    Returns:
+        AI response with updated state
+    """
+    try:
+        callskeleton_dict = get_call_skeleton(data.callSid)
+        callskeleton = CallSkeleton.model_validate(callskeleton_dict)
+    except ValueError:
+        raise HTTPException(
+            status_code=422, 
+            detail="CallSkeleton not found"
+        )
+    except ValidationError as e:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Invalid data format: {str(e)}"
+        )
+    
+    # Process conversation
+    state = cs_agent.process_conversation(data, callskeleton)
+    
+    return ConversationResponse(
+        assistant_message=state["last_llm_response"],
+        user_info=state,
+        conversation_complete=state["conversation_complete"]
+    )
+
+# ❌ Bad - Untyped, unclear error handling
+@router.post("/conversation")
+async def ai_conversation(data):
+    try:
+        skeleton = get_call_skeleton(data.callSid)
+    except:
+        return {"error": "failed"}  # Vague error
+        
+    response = process(skeleton, data.message)
+    return response
+```
+
+### Input Validation
+
+```python
+# ✅ Good - Pydantic models with validation
+class ConversationInput(BaseModel):
+    callSid: str = Field(..., description="Twilio CallSid – unique call ID")
+    customerMessage: Message = Field(..., description="Customer message object")
+    
+    @validator('callSid')
+    def validate_call_sid(cls, v):
+        if not v or len(v) < 10:
+            raise ValueError('Invalid callSid format')
+        return v
+
+# ❌ Bad - No validation
+def ai_conversation(call_sid: str, message: str):
+    # No guarantees about input format
+```
+
+## State Management
+
+### TypedDict for State
+
+```python
+# ✅ Good - Strongly typed state with TypedDict
+class CustomerServiceState(TypedDict):
+    name: Optional[str]
+    phone: Optional[str]
+    address: Optional[str]
+    service: Optional[str]
+    service_id: Optional[str]
+    current_step: str
+    name_complete: bool
+    phone_complete: bool
+    conversation_complete: bool
+
+# Usage
+def process_state(state: CustomerServiceState) -> CustomerServiceState:
+    # Type-safe access
+    if state["name_complete"] and state["phone_complete"]:
+        state["conversation_complete"] = True
+    return state
+
+# ❌ Bad - Dict without type safety
+def process_state(state: dict) -> dict:
+    if state.get("name_complete") and state.get("phone_complete"):
+        state["conversation_complete"] = True
+    return state
+```
+
+## LLM Integration
+
+### LLM Service Abstraction
+
+```python
+# ✅ Good - Abstracted LLM service
+class LLMService:
+    """LLM service abstraction for OpenAI."""
+    
+    def __init__(self, api_key: str, model: str = "gpt-4o-mini"):
+        self.client = OpenAI(api_key=api_key)
+        self.model = model
+    
+    async def generate_response(
+        self,
+        prompt: str,
+        temperature: float = 0.0,
+        max_tokens: int = 2500
+    ) -> str:
+        """Generate LLM response with error handling."""
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=[{"role": "user", "content": prompt}],
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            logger.error(f"LLM call failed: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="AI service temporarily unavailable"
+            )
+
+# Usage
+llm_service = LLMService(api_key=settings.openai_api_key)
+response = await llm_service.generate_response(prompt)
+
+# ❌ Bad - Direct API calls scattered everywhere
+async def extract_name(message):
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    response = client.chat.completions.create(...)
+    return response.choices[0].message.content
+```
+
+## Information Extraction
+
+### Extractor Pattern
+
+```python
+# ✅ Good - Reusable extractor functions
+async def extract_name_from_conversation(
+    state: CustomerServiceState,
+    message_history: Optional[List[ChatCompletionMessageParam]] = None
+) -> str:
+    """Extract customer name using LLM.
+    
+    Args:
+        state: Current conversation state
+        message_history: Optional message history for context
+        
+    Returns:
+        Extracted name or empty string
+    """
+    if not message_history:
+        message_history = state.get("message_history", [])
+    
+    context = _build_conversation_context(state)
+    
+    prompt = f"""Extract the customer's name from this conversation:
+
+{context}
+
+Return only the name, or an empty string if not found."""
+
+    try:
+        client = _get_openai_client()
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.0,
+        )
+        
+        name = response.choices[0].message.content.strip()
+        return name if name else ""
+    
+    except Exception as e:
+        logger.error(f"Name extraction failed: {e}")
+        return ""
+
+# ❌ Bad - Mixing extraction with business logic
+async def process_message(message):
+    # Extract name directly in processing function
+    client = OpenAI()
+    name = client.chat.completions.create(...)
+    # Then do phone, address, service extraction...
+    # Everything mixed together
+```
+
+## Error Handling
+
+### Comprehensive Error Handling
+
+```python
+# ✅ Good - Proper error handling with logging
+async def process_conversation(
+    call_sid: str,
+    message: str
+) -> Dict[str, Any]:
+    """Process conversation with proper error handling."""
+    try:
+        # 1. Validate input
+        if not call_sid or not message:
+            raise ValueError("Invalid input parameters")
+        
+        # 2. Get data
+        skeleton = get_call_skeleton(call_sid)
+        if not skeleton:
+            raise ValueError(f"CallSkeleton not found for {call_sid}")
+        
+        # 3. Process
+        state = cs_agent.process_conversation(skeleton, message)
+        
+        return state
+        
+    except ValueError as e:
+        logger.warning(f"Validation error: {e}")
+        raise HTTPException(status_code=400, detail=str(e))
+    
+    except RedisError as e:
+        logger.error(f"Redis error: {e}")
+        raise HTTPException(status_code=503, detail="Database unavailable")
+    
+    except Exception as e:
+        logger.exception(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+# ❌ Bad - Silent failures or bare except
+async def process_conversation(call_sid, message):
+    try:
+        skeleton = get_call_skeleton(call_sid)
+        state = process(skeleton, message)
+        return state
+    except:
+        return {}  # Silent failure, no logging
+```
+
+## Configuration
+
+### Pydantic Settings
+
+```python
+# ✅ Good - Type-safe configuration
+from pydantic_settings import BaseSettings
+from pydantic import Field
+
+class Settings(BaseSettings):
+    environment: str = Field(default="development")
+    debug: bool = Field(default=True)
+    
+    redis_host: str = Field(default="localhost")
+    redis_port: int = Field(default=6379)
+    
+    openai_api_key: Optional[str] = Field(default=None)
+    openai_model: str = Field(default="gpt-4o-mini")
+    openai_max_tokens: int = Field(default=2500)
+    
+    max_attempts: int = Field(default=3)
+    service_max_attempts: int = Field(default=3)
+    
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+# Usage
+settings = Settings()
+client = OpenAI(api_key=settings.openai_api_key)
+
+# ❌ Bad - Environment variables scattered everywhere
+import os
+
+redis_host = os.getenv("REDIS_HOST", "localhost")  # Everywhere
+api_key = os.getenv("OPENAI_API_KEY")  # No defaults, no validation
+```
+
+## Testing
+
+### Unit Tests
+
+```python
+# ✅ Good - Isolated unit tests
+import pytest
+from unittest.mock import Mock, patch
+
+@pytest.mark.asyncio
+async def test_extract_name_success():
+    """Test successful name extraction."""
+    message_history = [
+        {"role": "user", "content": "My name is John Smith"}
+    ]
+    
+    state = CustomerServiceState(
+        message_history=message_history,
+        name=None,
+    )
+    
+    with patch("services.llm_service._get_openai_client") as mock_client:
+        mock_client.return_value.chat.completions.create.return_value = Mock(
+            choices=[Mock(message=Mock(content="John Smith"))]
+        )
+        
+        name = await extract_name_from_conversation(state)
+        
+        assert name == "John Smith"
+
+@pytest.mark.asyncio
+async def test_extract_name_no_match():
+    """Test extraction when no name found."""
+    state = CustomerServiceState(message_history=[], name=None)
+    
+    name = await extract_name_from_conversation(state)
+    
+    assert name == ""
+
+# ❌ Bad - Tests hitting real APIs
+def test_extract_name():
+    name = extract_name_from_conversation("test message")
+    assert name == "ExpectedName"  # Relies on real LLM
+```
+
+## Common Pitfalls to Avoid
+
+1. **Don't ignore type hints** - Always type your functions
+2. **Don't use bare except** - Catch specific exceptions
+3. **Don't mix concerns** - Separate extraction, validation, processing
+4. **Don't hardcode values** - Use configuration
+5. **Don't skip error handling** - Handle all failure cases
+6. **Don't forget logging** - Log important events
+7. **Don't use mutable defaults** - Use None instead
+8. **Don't ignore async properly** - Use `await` correctly
+9. **Don't over-complicate** - Keep functions simple
+10. **Don't skip tests** - Write unit tests for critical paths
+11. **Don't forget docstrings** - Document public APIs
+12. **Don't use `print`** - Use proper logging
