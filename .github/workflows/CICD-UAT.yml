@@ -1,0 +1,42 @@
+name: Automatic pipeline for UAT deployment
+
+run-name: >
+  ${{ github.event_name == 'repository_dispatch' && format('UAT pipeline is triggered by {0} (by {1})', github.event.client_payload.submodule, github.event.client_payload.actor) ||
+      github.event_name == 'workflow_dispatch' && format('Manual UAT pipeline (by {0})', github.actor) ||
+      'UAT CI/CD pipeline' }}
+
+on:
+  repository_dispatch:
+    types: [submodule-updated]
+
+  workflow_dispatch:
+    inputs:
+      submodule:
+        description: "Choose app to build and deploy"
+        required: true
+        type: choice
+        options:
+          - frontend
+          - backend
+          - ai
+        
+# concurrency:
+#   group: ${{ github.workflow }}-${{ github.event.client_payload.submodule || inputs.submodule }}-${{ github.ref || github.run_id }}
+#   cancel-in-progress: true
+
+# permissions:
+#   contents: read
+
+env:
+  IMAGE_TAG: uat-${{ github.run_number }}
+  SUBMODULE: ${{ github.event.client_payload.submodule || inputs.submodule }}
+
+jobs:
+  ci_frontend:
+    runs-on: ubuntu-latest
+    if: ${{ env.SUBMODULE == 'frontend' }}
+    steps:
+      - name: Hello from frontend
+        run: |
+          echo "Submodule: ${{ github.event.client_payload.submodule }}"
+          echo "Branch: ${{ github.event.client_payload.ref }}"
