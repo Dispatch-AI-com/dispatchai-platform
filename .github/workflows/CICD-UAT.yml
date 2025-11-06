@@ -34,7 +34,6 @@ env:
 jobs:
   ci_frontend:
     runs-on: ubuntu-latest
-    if: ${{ env.SUBMODULE == 'frontend' }}
     steps:
       - name: Hello from frontend
         run: |
