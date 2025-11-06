@@ -31,36 +31,93 @@ env:
   SUBMODULE: ${{ github.event.client_payload.submodule || inputs.submodule }}
 
 jobs:
-  frontend_ci:
-    runs-on: ubuntu-latest
+  frontend_deployment:
     if: ${{ github.event.client_payload.submodule == 'Dispatch-AI-com/frontend' || inputs.submodule == 'frontend' }}
-    steps:
-      - name: Hello from frontend
-        run: |
-          echo "Submodule: ${{ github.event.client_payload.submodule }}"
-          echo "Branch: ${{ github.event.client_payload.ref }}"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./apps/frontend
 
-      - name: Checkout reposi tory with submodules
+    steps:
+      - name: Checkout repository with submodules
         uses: actions/checkout@v4
         with:
           submodules: recursive
           fetch-depth: 0
 
+      - name: Hello from frontend
+        run: |
+          echo "Submodule: ${{ github.event.client_payload.submodule }}"
+          echo "Branch: ${{ github.event.client_payload.ref }}"
+
       - name: Update submodules to latest main
+        working-directory: .
         run: |
           git submodule update --init --recursive --remote
-          git submodule update --remote --recursive
           git submodule status
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
+      - name: Setup pnpm
+        run: npm install -g pnpm
 
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
 
+      - name: Type check
+        run: pnpm run type-check
 
+      - name: Lint
+        run: pnpm run lint
 
+      - name: Test
+        run: pnpm test
 
+      - name: Build (inject NEXT_PUBLIC_API_BASE_URL)
+        run: |
+          NEXT_PUBLIC_API_BASE_URL="${{ secrets.BACKEND_URL_UAT }}" pnpm build
 
+      - name: Verify build output
+        run: |
+          echo "PWD:"
+          pwd
+          echo "List:"
+          ls -la
 
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CICD_ROLE_ARN_UAT }}
+          aws-region: ${{ secrets.AWS_REGION_UAT }}
 
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          context: ./apps/frontend
+          file: ./apps/frontend/Dockerfile.uat
+          tags: |
+            ${{ secrets.FRONTEND_ECR_UAT }}:${{ env.IMAGE_TAG }}
+          platforms: linux/amd64
+          provenance: false
+
+      - name: Deploy via SSM SendCommand
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --comment "GitHub Actions deploy frontend. Image:${{ env.IMAGE_TAG }}." \
+            --parameters "commands=['sudo bash /home/ubuntu/devops/deployment/uat/deploy-frontend-uat.sh ${{ env.IMAGE_TAG }}']" \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID_UAT }}" \
+            --region "${{ secrets.AWS_REGION_UAT }}"
 
 
 
