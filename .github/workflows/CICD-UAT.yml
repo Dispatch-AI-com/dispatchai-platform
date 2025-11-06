@@ -2,8 +2,7 @@ name: Automatic pipeline for UAT deployment
 
 run-name: >
   ${{ github.event_name == 'repository_dispatch' && format('UAT pipeline is triggered by {0} (by {1})', github.event.client_payload.submodule, github.event.client_payload.actor) ||
-      github.event_name == 'workflow_dispatch' && format('Manual UAT pipeline (by {0})', github.actor) ||
-      'UAT CI/CD pipeline' }}
+      github.event_name == 'workflow_dispatch' && format('Manual UAT pipeline (by {0})', github.actor) }}
 
 on:
   repository_dispatch:
@@ -17,15 +16,15 @@ on:
         type: choice
         options:
           - frontend
-          - backend
+          - api
           - ai
         
-# concurrency:
-#   group: ${{ github.workflow }}-${{ github.event.client_payload.submodule || inputs.submodule }}-${{ github.ref || github.run_id }}
-#   cancel-in-progress: true
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('manual-{0}', inputs.submodule) || github.event.client_payload.submodule || inputs.submodule }}
+  cancel-in-progress: true
 
-# permissions:
-#   contents: read
+permissions:
+  contents: write
 
 env:
   IMAGE_TAG: uat-${{ github.run_number }}
@@ -40,11 +39,37 @@ jobs:
         run: |
           echo "Submodule: ${{ github.event.client_payload.submodule }}"
           echo "Branch: ${{ github.event.client_payload.ref }}"
-  backend_ci:
+
+      - name: Checkout reposi tory with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Update submodules to latest main
+        run: |
+          git submodule update --init --recursive --remote
+          git submodule update --remote --recursive
+          git submodule status
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  api_ci:
     runs-on: ubuntu-latest
     if: ${{ github.event.client_payload.submodule == 'Dispatch-AI-com/backend' || inputs.submodule == 'backend' }}
     steps:
-      - name: Hello from backend
+      - name: Hello from api
         run: |
           echo "Submodule: ${{ github.event.client_payload.submodule }}"
           echo "Branch: ${{ github.event.client_payload.ref }}"
