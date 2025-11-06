@@ -266,7 +266,7 @@ jobs:
           context: ./apps/ai
           file: ./apps/ai/Dockerfile.uat
           tags: |
-            ${{ secrets.BACKEND_API_ECR_UAT }}:${{ env.IMAGE_TAG }}
+            ${{ secrets.BACKEND_AI_ECR_UAT }}:${{ env.IMAGE_TAG }}
           platforms: linux/amd64
           provenance: false
 
