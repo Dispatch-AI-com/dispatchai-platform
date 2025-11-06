@@ -32,10 +32,27 @@ env:
   SUBMODULE: ${{ github.event.client_payload.submodule || inputs.submodule }}
 
 jobs:
-  ci_frontend:
+  frontend_ci:
     runs-on: ubuntu-latest
+    if: ${{ github.event.client_payload.submodule == 'Dispatch-AI-com/frontend' || inputs.submodule == 'frontend' }}
     steps:
       - name: Hello from frontend
+        run: |
+          echo "Submodule: ${{ github.event.client_payload.submodule }}"
+          echo "Branch: ${{ github.event.client_payload.ref }}"
+  backend_ci:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.client_payload.submodule == 'Dispatch-AI-com/backend' || inputs.submodule == 'backend' }}
+    steps:
+      - name: Hello from backend
+        run: |
+          echo "Submodule: ${{ github.event.client_payload.submodule }}"
+          echo "Branch: ${{ github.event.client_payload.ref }}"
+  ai_ci:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.client_payload.submodule == 'Dispatch-AI-com/ai' || inputs.submodule == 'ai' }}
+    steps:
+      - name: Hello from ai
         run: |
           echo "Submodule: ${{ github.event.client_payload.submodule }}"
           echo "Branch: ${{ github.event.client_payload.ref }}"
