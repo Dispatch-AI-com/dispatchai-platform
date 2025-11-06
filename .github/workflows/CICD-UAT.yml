@@ -2,8 +2,7 @@ name: Automatic pipeline for UAT deployment
 
 run-name: >
   ${{ github.event_name == 'repository_dispatch' && format('UAT pipeline is triggered by {0} (by {1})', github.event.client_payload.submodule, github.event.client_payload.actor) ||
-      github.event_name == 'workflow_dispatch' && format('Manual UAT pipeline (by {0})', github.actor) ||
-      'UAT CI/CD pipeline' }}
+      github.event_name == 'workflow_dispatch' && format('Manual UAT pipeline for {0} (by {1})', inputs.submodule, github.actor) }}
 
 on:
   repository_dispatch:
@@ -17,42 +16,266 @@ on:
         type: choice
         options:
           - frontend
-          - backend
+          - api
           - ai
         
-# concurrency:
-#   group: ${{ github.workflow }}-${{ github.event.client_payload.submodule || inputs.submodule }}-${{ github.ref || github.run_id }}
-#   cancel-in-progress: true
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'workflow_dispatch' && format('manual-{0}', inputs.submodule) || github.event.client_payload.submodule || inputs.submodule }}
+  cancel-in-progress: true
 
-# permissions:
-#   contents: read
+permissions:
+  contents: write
+  id-token: write
 
 env:
   IMAGE_TAG: uat-${{ github.run_number }}
   SUBMODULE: ${{ github.event.client_payload.submodule || inputs.submodule }}
 
 jobs:
-  frontend_ci:
-    runs-on: ubuntu-latest
+  frontend_deployment:
     if: ${{ github.event.client_payload.submodule == 'Dispatch-AI-com/frontend' || inputs.submodule == 'frontend' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./apps/frontend
+
     steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
       - name: Hello from frontend
         run: |
           echo "Submodule: ${{ github.event.client_payload.submodule }}"
           echo "Branch: ${{ github.event.client_payload.ref }}"
-  backend_ci:
-    runs-on: ubuntu-latest
-    if: ${{ github.event.client_payload.submodule == 'Dispatch-AI-com/backend' || inputs.submodule == 'backend' }}
-    steps:
-      - name: Hello from backend
+
+      - name: Update submodules to latest main
+        working-directory: .
         run: |
-          echo "Submodule: ${{ github.event.client_payload.submodule }}"
-          echo "Branch: ${{ github.event.client_payload.ref }}"
-  ai_ci:
+          git submodule update --init --recursive --remote
+          git submodule status
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        run: npm install -g pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm run type-check
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build (inject NEXT_PUBLIC_API_BASE_URL)
+        run: |
+          NEXT_PUBLIC_API_BASE_URL="${{ secrets.BACKEND_URL_UAT }}" pnpm build
+
+      - name: Verify build output
+        run: |
+          echo "PWD:"
+          pwd
+          echo "List:"
+          ls -la
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CICD_ROLE_ARN_UAT }}
+          aws-region: ${{ secrets.AWS_REGION_UAT }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          context: ./apps/frontend
+          file: ./apps/frontend/Dockerfile.uat
+          tags: |
+            ${{ secrets.FRONTEND_ECR_UAT }}:${{ env.IMAGE_TAG }}
+          platforms: linux/amd64
+          provenance: false
+
+      - name: Deploy via SSM SendCommand
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --comment "GitHub Actions deploy frontend. Image:${{ env.IMAGE_TAG }}." \
+            --parameters '{"workingDirectory":["/home/ubuntu/devops/deployment/uat"],"commands":["sudo bash ./deploy-frontend-uat.sh '"${IMAGE_TAG}"'"]}' \
+            --cloud-watch-output-config "CloudWatchLogGroupName=/ssm/uat/deployment/frontend/,CloudWatchOutputEnabled=true" \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID_UAT }}" \
+            --region "${{ secrets.AWS_REGION_UAT }}"
+
+  api_deployment:
+    if: ${{ github.event.client_payload.submodule == 'Dispatch-AI-com/backend' || inputs.submodule == 'api' }}
     runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:latest
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --eval 'db.runCommand({ping: 1})'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    defaults:
+      run:
+        working-directory: ./apps/backend
+
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+
+      - name: Update submodules to latest main
+        working-directory: .
+        run: |
+          git submodule update --init --recursive --remote
+          git submodule status
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Setup pnpm
+        run: npm install -g pnpm
+
+      - name: pnpm install
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm run type-check
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Run Unit & Integration Tests
+        run: pnpm test:ci
+        env:
+          CI: true
+
+      - name: Type Check (tsc)
+        run: pnpm run type-check
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CICD_ROLE_ARN_UAT }}
+          aws-region: ${{ secrets.AWS_REGION_UAT }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          context: ./apps/backend
+          file: ./apps/backend/Dockerfile.uat
+          tags: |
+            ${{ secrets.BACKEND_API_ECR_UAT }}:${{ env.IMAGE_TAG }}
+          platforms: linux/amd64
+          provenance: false
+
+      - name: Deploy via SSM SendCommand
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --comment "GitHub Actions deploy backend-api. Image:${{ env.IMAGE_TAG }}." \
+            --parameters '{"workingDirectory":["/home/ubuntu/devops/deployment/uat"],"commands":["sudo bash ./deploy-api-uat.sh '"${IMAGE_TAG}"'"]}' \
+            --cloud-watch-output-config "CloudWatchLogGroupName=/ssm/uat/deployment/api/,CloudWatchOutputEnabled=true" \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID_UAT }}" \
+            --region "${{ secrets.AWS_REGION_UAT }}"
+
+  ai_deployment:
     if: ${{ github.event.client_payload.submodule == 'Dispatch-AI-com/ai' || inputs.submodule == 'ai' }}
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./apps/ai
+
     steps:
-      - name: Hello from ai
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          fetch-depth: 0
+        
+      - name: Update submodules to latest main
+        working-directory: .
         run: |
-          echo "Submodule: ${{ github.event.client_payload.submodule }}"
-          echo "Branch: ${{ github.event.client_payload.ref }}"
+          git submodule update --init --recursive --remote
+          git submodule status
+          
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install uv
+        run: pip install --upgrade uv
+      
+      - name: uv sync
+        run: uv sync --all-extras --dev
+
+      - name: Lint
+        run: make lint
+
+      - name: Format Check
+        run: make format
+ 
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CICD_ROLE_ARN_UAT }}
+          aws-region: ${{ secrets.AWS_REGION_UAT }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          push: true
+          context: ./apps/ai
+          file: ./apps/ai/Dockerfile.uat
+          tags: |
+            ${{ secrets.BACKEND_API_ECR_UAT }}:${{ env.IMAGE_TAG }}
+          platforms: linux/amd64
+          provenance: false
+
+      - name: Deploy via SSM SendCommand
+        run: |
+          aws ssm send-command \
+            --document-name "AWS-RunShellScript" \
+            --comment "GitHub Actions deploy backend-api. Image:${{ env.IMAGE_TAG }}." \
+            --parameters '{"workingDirectory":["/home/ubuntu/devops/deployment/uat"],"commands":["sudo bash ./deploy-ai-uat.sh '"${IMAGE_TAG}"'"]}' \
+            --cloud-watch-output-config "CloudWatchLogGroupName=/ssm/uat/deployment/ai/,CloudWatchOutputEnabled=true" \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID_UAT }}" \
+            --region "${{ secrets.AWS_REGION_UAT }}"
