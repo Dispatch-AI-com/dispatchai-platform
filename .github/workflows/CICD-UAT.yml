@@ -2,7 +2,7 @@ name: Automatic pipeline for UAT deployment
 
 run-name: >
   ${{ github.event_name == 'repository_dispatch' && format('UAT pipeline is triggered by {0} (by {1})', github.event.client_payload.submodule, github.event.client_payload.actor) ||
-      github.event_name == 'workflow_dispatch' && format('Manual UAT pipeline (by {0})', github.actor) }}
+      github.event_name == 'workflow_dispatch' && format('Manual UAT pipeline for {0} (by {1})', inputs.submodule, github.actor) }}
 
 on:
   repository_dispatch:
@@ -117,7 +117,8 @@ jobs:
           aws ssm send-command \
             --document-name "AWS-RunShellScript" \
             --comment "GitHub Actions deploy frontend. Image:${{ env.IMAGE_TAG }}." \
-            --parameters "commands=['sudo bash /home/ubuntu/devops/deployment/uat/deploy-frontend-uat.sh ${{ env.IMAGE_TAG }}']" \
+            --parameters '{"workingDirectory":["/home/ubuntu/devops/deployment/uat"],"commands":["sudo bash ./deploy-frontend-uat.sh '"${IMAGE_TAG}"'"]}' \
+            --cloud-watch-output-config "CloudWatchLogGroupName=/ssm/uat/deployment/,CloudWatchOutputEnabled=true" \
             --instance-ids "${{ secrets.EC2_INSTANCE_ID_UAT }}" \
             --region "${{ secrets.AWS_REGION_UAT }}"
 
