@@ -53,7 +53,7 @@ UAT_SSH_USER         # SSH username (usually 'ubuntu' or 'ec2-user')
 ```yaml
 AWS_REGION: ap-southeast-2
 REMOTE_PROJECT_DIR: /opt/dispatchai-platform
-REMOTE_COMPOSE_FILE: infra/docker-compose.uat.yml
+REMOTE_COMPOSE_FILE: deployment/uat/docker-compose.uat.yml
 ```
 
 ## AWS ECR Authentication
@@ -92,13 +92,13 @@ aws ecr get-login-password --region ap-southeast-2 \
   ${ACCOUNT_ID}.dkr.ecr.ap-southeast-2.amazonaws.com
 
 # 4. Pull latest images
-docker compose -f infra/docker-compose.uat.yml pull
+docker compose -f deployment/uat/docker-compose.uat.yml pull
 
 # 5. Restart services (zero-downtime if using rolling updates)
-docker compose -f infra/docker-compose.uat.yml up -d
+docker compose -f deployment/uat/docker-compose.uat.yml up -d
 
 # 6. Verify
-docker compose -f infra/docker-compose.uat.yml ps
+docker compose -f deployment/uat/docker-compose.uat.yml ps
 
 # 7. Clean up
 docker image prune -f
@@ -131,13 +131,13 @@ View deployment status:
 ssh ${UAT_SSH_USER}@${UAT_SSH_HOST}
 
 # Check container logs
-docker compose -f infra/docker-compose.uat.yml logs -f
+docker compose -f deployment/uat/docker-compose.uat.yml logs -f
 
 # Check resource usage
 docker stats
 
 # Check container health
-docker compose -f infra/docker-compose.uat.yml ps
+docker compose -f deployment/uat/docker-compose.uat.yml ps
 ```
 
 ## Rollback
@@ -155,9 +155,9 @@ cd /opt/dispatchai-platform
 docker images | grep dispatchai
 
 # Use previous image tag
-docker compose -f infra/docker-compose.uat.yml down
+docker compose -f deployment/uat/docker-compose.uat.yml down
 docker tag registry/image:previous-tag registry/image:uat-latest
-docker compose -f infra/docker-compose.uat.yml up -d
+docker compose -f deployment/uat/docker-compose.uat.yml up -d
 ```
 
 ## Troubleshooting
@@ -166,7 +166,7 @@ docker compose -f infra/docker-compose.uat.yml up -d
 
 **Check logs:**
 1. GitHub Actions → Workflow run → Failed step
-2. EC2 logs: `docker compose -f infra/docker-compose.uat.yml logs [service]`
+2. EC2 logs: `docker compose -f deployment/uat/docker-compose.uat.yml logs [service]`
 
 **Common issues:**
 - SSH key expired → Regenerate and update secret
@@ -248,7 +248,7 @@ aws ecr list-images --repository-name frontend --region ap-southeast-2
 
 ## Further Reading
 
-- **Infrastructure README**: `infra/README.md`
+- **Deployment README**: `deployment/README.md`
 - **Root README**: `README.md`
 - **GitHub Actions Docs**: https://docs.github.com/en/actions
 - **AWS ECR Docs**: https://docs.aws.amazon.com/ecr/
