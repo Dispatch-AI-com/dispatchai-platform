@@ -12,7 +12,7 @@ dispatchai-platform/
 │   ├── frontend/      # Next.js 15 web application
 │   ├── backend/       # NestJS REST API & business logic
 │   └── ai/            # FastAPI AI agent service
-├── infra/             # Docker Compose configurations
+├── deployment/        # Docker Compose configurations
 └── .github/           # CI/CD workflows
 ```
 
@@ -37,10 +37,13 @@ dispatchai-platform/
 
 ### Prerequisites
 
-- Docker & Docker Compose
-- Git
-- AWS CLI (for deployments)
-- SSH keys configured (for UAT deployment)
+- **Docker** & **Docker Compose** (v2.0+)
+- **Git**
+- **pnpm** (package manager) - Install: `npm install -g pnpm`
+- **Node.js** 18+ (for local development)
+- **Python** 3.11+ (for AI service local development)
+- **AWS CLI** (for deployments)
+- **SSH keys** configured (for UAT deployment)
 
 ### Development Environment
 
@@ -70,7 +73,9 @@ dispatchai-platform/
 
 3. **Start all services**
    ```bash
-   npm run dev:up
+   pnpm run dev:up
+   # Or use docker compose directly:
+   # docker compose -f deployment/dev/docker-compose.dev.yml up -d --build
    ```
 
 4. **Access services**
@@ -84,18 +89,18 @@ dispatchai-platform/
 
 ```bash
 # Development
-npm run dev:up              # Start all services
-npm run dev:down            # Stop all services
-npm run dev:logs            # View logs (last 100 lines)
-npm run dev:ps              # Show running containers
+pnpm run dev:up              # Start all services
+pnpm run dev:down            # Stop all services
+pnpm run dev:logs            # View logs (last 100 lines)
+pnpm run dev:ps              # Show running containers
 
 # Rebuild specific services
-npm run dev:rebuild:api     # Rebuild backend only
-npm run dev:rebuild:ai      # Rebuild AI service only
+pnpm run dev:rebuild:api     # Rebuild backend only
+pnpm run dev:rebuild:ai      # Rebuild AI service only
 
 # UAT Deployment
-npm run uat:up              # Deploy to UAT environment
-npm run uat:down            # Stop UAT services
+pnpm run uat:up              # Deploy to UAT environment
+pnpm run uat:down            # Stop UAT services
 ```
 
 ## 📁 Project Structure
@@ -238,10 +243,10 @@ REDIS_PORT=6379
 ### Backend
 ```bash
 cd apps/backend
-npm run test              # Run all tests
-npm run test:unit         # Unit tests only
-npm run test:integration  # Integration tests only
-npm run test:watch        # Watch mode
+pnpm test                 # Run all tests
+pnpm test:unit            # Unit tests only
+pnpm test:integration     # Integration tests only
+pnpm test:watch           # Watch mode
 ```
 
 ### AI Service
@@ -273,8 +278,8 @@ UAT deployments are automated via GitHub Actions:
 **UAT configuration:**
 - EC2 region: `ap-southeast-2`
 - Project directory: `/opt/dispatchai-platform`
-- Compose file: `infra/docker-compose.uat.yml`
-- ECR registry: `123456789012.dkr.ecr.ap-southeast-2.amazonaws.com`
+- Compose file: `deployment/uat/docker-compose.uat.yml`
+- ECR registry: `381492119078.dkr.ecr.ap-southeast-2.amazonaws.com`
 
 ### Secrets Required
 
@@ -318,7 +323,7 @@ AWS_REGION            # AWS region
 
 1. **Check logs**:
    ```bash
-   npm run dev:logs                 # All services
+   pnpm run dev:logs                # All services
    docker logs dispatchai-api       # Backend only
    docker logs dispatchai-ai        # AI service only
    docker logs dispatchai-frontend  # Frontend only
@@ -351,8 +356,10 @@ AWS_REGION            # AWS region
 - **Backend API Docs**: `http://localhost:4000/api` (Swagger UI)
 - **AI Service Docs**: `http://localhost:8000/docs` (FastAPI OpenAPI)
 - **Backend README**: See `apps/backend/README.md`
-- **Frontend README**: See `apps/frontend/README.md`
-- **AI Service README**: See `apps/ai/README.md`
+- **Frontend README**: See `apps/frontend/readme.md`
+- **AI Service README**: See `apps/ai/readme.md`
+- **Deployment README**: See `deployment/README.md`
+- **CI/CD README**: See `.github/README.md`
 
 ## 🤝 Development Workflow
 
@@ -364,6 +371,49 @@ AWS_REGION            # AWS region
 6. **Review**: Code review and approval
 7. **Merge**: Merge to `main`
 8. **Deploy**: Auto-deploy to UAT via GitHub Actions
+
+## 📦 Package Management
+
+This project uses **pnpm** as the package manager for all Node.js services (Frontend and Backend).
+
+### Why pnpm?
+
+- **Faster**: Up to 2x faster than npm
+- **Disk efficient**: Uses hard links to save disk space
+- **Strict**: Better dependency resolution
+- **Monorepo friendly**: Excellent workspace support
+
+### Installing pnpm
+
+```bash
+# Install globally
+npm install -g pnpm
+
+# Or using corepack (Node.js 16.13+)
+corepack enable
+corepack prepare pnpm@latest --activate
+```
+
+### Common pnpm Commands
+
+```bash
+# Install dependencies
+pnpm install
+
+# Add dependency
+pnpm add <package>
+
+# Add dev dependency
+pnpm add -D <package>
+
+# Run scripts
+pnpm run <script>
+# Or shorthand (if script doesn't conflict)
+pnpm <script>
+
+# Run in workspace
+pnpm --filter <workspace> <command>
+```
 
 ## 📝 License
 
