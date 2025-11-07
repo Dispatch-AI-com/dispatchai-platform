@@ -10,5 +10,9 @@
 	path = apps/ai
 	url = https://github.com/Dispatch-AI-com/AI.git
 	branch = main
+[submodule "deployment"]
+	path = deployment
+	url = https://github.com/Dispatch-AI-com/deployment.git
+	branch = main
 [submodule]
 	recurse = true
