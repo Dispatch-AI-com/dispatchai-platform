@@ -2,19 +2,19 @@
   "name": "dispatchai-platform",
   "private": true,
   "scripts": {
-    "dev:up": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml up -d --build",
-    "dev:down": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml down",
-    "dev:logs": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml logs -f --tail=100",
-    "dev:ps": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml ps",
+    "dev:up": "cd deployment/dev && docker compose -f docker-compose.dev.yml up -d --build",
+    "dev:down": "cd deployment/dev && docker compose -f docker-compose.dev.yml down",
+    "dev:logs": "cd deployment/dev && docker compose -f docker-compose.dev.yml logs -f --tail=100",
+    "dev:ps": "cd deployment/dev && docker compose -f docker-compose.dev.yml ps",
 
-    "dev:rebuild:api": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml build api && docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml up -d api",
-    "dev:rebuild:ai": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml build ai && docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml up -d ai",
-    "dev:rebuild:frontend": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml build frontend && docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml up -d frontend",
+    "dev:rebuild:api": "cd deployment/dev && docker compose -f docker-compose.dev.yml build api && docker compose -f docker-compose.dev.yml up -d api",
+    "dev:rebuild:ai": "cd deployment/dev && docker compose -f docker-compose.dev.yml build ai && docker compose -f docker-compose.dev.yml up -d ai",
+    "dev:rebuild:frontend": "cd deployment/dev && docker compose -f docker-compose.dev.yml build frontend && docker compose -f docker-compose.dev.yml up -d frontend",
 
-    "dev:logs:api": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml logs -f api",
-    "dev:logs:ai": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml logs -f ai",
-    "dev:logs:frontend": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml logs -f frontend",
-    "dev:logs:cloudflared": "docker compose --project-directory . -f deployment/dev/docker-compose.dev.yml logs -f cloudflared"
+    "dev:logs:api": "cd deployment/dev && docker compose -f docker-compose.dev.yml logs -f api",
+    "dev:logs:ai": "cd deployment/dev && docker compose -f docker-compose.dev.yml logs -f ai",
+    "dev:logs:frontend": "cd deployment/dev && docker compose -f docker-compose.dev.yml logs -f frontend",
+    "dev:logs:cloudflared": "cd deployment/dev && docker compose -f docker-compose.dev.yml logs -f cloudflared"
     
   }
 }
